@@ -1,9 +1,6 @@
-tempProject
+Telecom Project
 ===========
 
-temporary project
-
-This is the Temporary project.
-Enjoyy !!!!!!
+This is the Telecom Data Analysis project.
 
 -Irfan
