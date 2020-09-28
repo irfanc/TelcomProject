@@ -303,3 +303,47 @@ def predict_data(model, df):
     return Y_predict
 
 
+
+def prepare_data1(train_file_name , test_file_name) :
+
+    col = ["duration","protocol_type","service","flag","src_bytes","dst_bytes","land", "wrong_fragment","urgent","hot","num_failed_logins","logged_in", "num_compromised","root_shell","su_attempted","num_root","num_file_creations", "num_shells","num_access_files","num_outbound_cmds","is_hot_login", "is_guest_login","_count","srv_count","serror_rate", "srv_serror_rate", "rerror_rate","srv_rerror_rate","same_srv_rate", "diff_srv_rate", "srv_diff_host_rate","dst_host_count","dst_host_srv_count","dst_host_same_srv_rate", "dst_host_diff_srv_rate","dst_host_same_src_port_rate", "dst_host_srv_diff_host_rate","dst_host_serror_rate","dst_host_srv_serror_rate", "dst_host_rerror_rate","dst_host_srv_rerror_rate","attack", "last_flag"]
+    df = pd.read_csv(train_file_name, names = col)
+    df_test = pd.read_csv(test_file_name, names = col)
+
+    drop_cols_with_equal_min_max(df)   		# for test and train both
+    drop_cols_with_equal_min_max(df_test)   # for test and train both
+
+    # computing list of corelated columns which needs to be dropped
+    df_corr = corelated_feature_matrix(df, threshold_value=0.7) # for train data
+    drop_cols = compute_corelated_cols(df_corr)
+
+    # Drop columns from Train and Test DataSet
+    df.drop( columns= drop_cols , inplace = True)
+    df_test.drop( columns= drop_cols , inplace = True)
+
+    #encoding of categorical_cols
+    categorical_cols = ['protocol_type', 'service', 'flag']
+    encoding_categorical_cols(df, categorical_cols)
+    encoding_categorical_cols(df_test, categorical_cols)
+
+    # encoding of binary_cols
+    binary_cols = ['land', 'logged_in', 'root_shell', 'is_hot_login', 'su_attempted']
+    encoding_binary_cols(df, binary_cols)
+    encoding_binary_cols(df_test, binary_cols)
+
+    # encoding of target_cols
+    target_cols = 'attack'
+    encoding_target_cols(df_train , target_cols)
+    encoding_target_cols(df_test , target_cols)
+
+    target_cols = ['attack', 'attack_code'  , 'attack_type']
+    feature_cols = df.drop(columns = target_cols).columns
+
+    df_train_scaled = scaleData( df[feature_cols])
+    df_test_scaled  = scaleData( df_test[feature_cols])
+
+    imp_cols = compute_important_cols(df_train, min_importance_value = 0.02, plot=False)
+
+    # dump  test and train data into csv file
+    df_train_scaled[feature_cols].to_csv('train_data.csv', header = True , index=False , columns=dump_df.columns )
+    df_test_scaled[feature_cols].to_csv('test_data.csv', header = True , index=False , columns=dump_df.columns )

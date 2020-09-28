@@ -32,49 +32,6 @@ import Definitions as lib
 import pickle
 import os
 
-def prepare_data1(train_file_name , test_file_name) :
-
-    col = ["duration","protocol_type","service","flag","src_bytes","dst_bytes","land", "wrong_fragment","urgent","hot","num_failed_logins","logged_in", "num_compromised","root_shell","su_attempted","num_root","num_file_creations", "num_shells","num_access_files","num_outbound_cmds","is_hot_login", "is_guest_login","_count","srv_count","serror_rate", "srv_serror_rate", "rerror_rate","srv_rerror_rate","same_srv_rate", "diff_srv_rate", "srv_diff_host_rate","dst_host_count","dst_host_srv_count","dst_host_same_srv_rate", "dst_host_diff_srv_rate","dst_host_same_src_port_rate", "dst_host_srv_diff_host_rate","dst_host_serror_rate","dst_host_srv_serror_rate", "dst_host_rerror_rate","dst_host_srv_rerror_rate","attack", "last_flag"]
-    df = pd.read_csv(train_file_name, names = col)
-    df_test = pd.read_csv(test_file_name, names = col)
-
-    drop_cols_with_equal_min_max(df)   		# for test and train both
-    drop_cols_with_equal_min_max(df_test)   # for test and train both
-
-    # computing list of corelated columns which needs to be dropped
-    df_corr = corelated_feature_matrix(df, threshold_value=0.7) # for train data
-    drop_cols = compute_corelated_cols(df_corr)
-
-    # Drop columns from Train and Test DataSet
-    df.drop( columns= drop_cols , inplace = True)
-    df_test.drop( columns= drop_cols , inplace = True)
-
-    #encoding of categorical_cols
-    categorical_cols = ['protocol_type', 'service', 'flag']
-    encoding_categorical_cols(df, categorical_cols)
-    encoding_categorical_cols(df_test, categorical_cols)
-
-    # encoding of binary_cols
-    binary_cols = ['land', 'logged_in', 'root_shell', 'is_hot_login', 'su_attempted']
-    encoding_binary_cols(df, binary_cols)
-    encoding_binary_cols(df_test, binary_cols)
-
-    # encoding of target_cols
-    target_cols = 'attack'
-    encoding_target_cols(df_train , target_cols)
-    encoding_target_cols(df_test , target_cols)
-
-    target_cols = ['attack', 'attack_code'  , 'attack_type']
-    feature_cols = df.drop(columns = target_cols).columns
-
-    df_train_scaled = scaleData( df[feature_cols])
-    df_test_scaled  = scaleData( df_test[feature_cols])
-
-    imp_cols = compute_important_cols(df_train, min_importance_value = 0.02, plot=False)
-
-    # dump  test and train data into csv file
-    df_train_scaled[feature_cols].to_csv('train_data.csv', header = True , index=False , columns=dump_df.columns )
-    df_test_scaled[feature_cols].to_csv('test_data.csv', header = True , index=False , columns=dump_df.columns )
 
 
 def create_feature_inputs_sidebar(df):
@@ -102,6 +59,19 @@ def create_feature_inputs_sidebar(df):
 
     return d
 
+def prepare_data(df_train, df_test):
+    # prepare_test_as_train_data(df_train , inputDF)
+    df_test_cpy = df_test.copy()
+    df_train['train'] = 1
+    df_test_cpy['train'] = 0
+    df = pd.concat([df_train, df_test_cpy], ignore_index=True)
+    df, feature_col = lib.prepare_data(df, binary=True, category=True, scaling=True , target=False)
+    df_train = df[ df['train'] == 1]
+    df_test_cpy =  df[ df['train'] == 0]
+    df_train.drop(['train'], axis=1, inplace=True)
+    df_test_cpy.drop(['train'], axis=1, inplace=True)
+    return df_test_cpy
+
 def manual_test_input(df_train):
     """ Function to take Manual inputs for Network parameter """
 
@@ -109,44 +79,42 @@ def manual_test_input(df_train):
     inputDF = create_feature_inputs_sidebar(df_train)
     # st.text('manual_test_input .. start')
     # st.dataframe(inputDF.head())
+    df_test = prepare_data(df_train, inputDF)
 
     # prepare_test_as_train_data(df_train , inputDF)
-    df_train['train'] = 1
-    inputDF['train'] = 0
-    df = pd.concat([df_train, inputDF], ignore_index=True)
-    df, feature_col = lib.prepare_data(df, binary=True, category=True, scaling=True , target=False)
-    df_train = df[ df['train'] == 1]
-    inputDF =  df[ df['train'] == 0]
-    df_train.drop(['train'], axis=1, inplace=True)
-    inputDF.drop(['train'], axis=1, inplace=True)
-    # inputDF.reset_index(drop=True,inplace=True)
-    # st.text('manual_test_input .. end')
-
-    return inputDF
+    # df_train['train'] = 1
+    # inputDF['train'] = 0
+    # df = pd.concat([df_train, inputDF], ignore_index=True)
+    # df, feature_col = lib.prepare_data(df, binary=True, category=True, scaling=True , target=False)
+    # df_train = df[ df['train'] == 1]
+    # inputDF =  df[ df['train'] == 0]
+    # df_train.drop(['train'], axis=1, inplace=True)
+    # inputDF.drop(['train'], axis=1, inplace=True)
+    return inputDF, df_test
 
 
 def csv_test_input(df_train):
     """ Function to take File based inputs for Network parameter """
 
-    uploaded_file = st.file_uploader(" Test Network Data", type="csv")
+    uploaded_file = st.file_uploader("Telecom Network Testing Data", type="csv")
     inputDF = None
+    df_test = None
     if uploaded_file is not None:
         inputDF = pd.read_csv(uploaded_file)
         # st.text('csv_test_input .. start')
         # st.dataframe(inputDF.head())
 
-        df_train['train'] = 1
-        inputDF['train'] = 0
-        df = pd.concat([df_train, inputDF], ignore_index=True)
-        df, feature_col = lib.prepare_data(df, binary=True, category=True, scaling=True , target=False)
-        df_train = df[ df['train'] == 1]
-        inputDF =  df[ df['train'] == 0]
-        df_train.drop(['train'], axis=1, inplace=True)
-        inputDF.drop(['train'], axis=1, inplace=True)
-        inputDF.reset_index(drop=True,inplace=True)
-        # st.text('csv_test_input .. end')
-
-    return inputDF
+        df_test = prepare_data(df_train , inputDF)
+        # df_train['train'] = 1
+        # inputDF['train'] = 0
+        # df = pd.concat([df_train, inputDF], ignore_index=True)
+        # df, feature_col = lib.prepare_data(df, binary=True, category=True, scaling=True , target=False)
+        # df_train = df[ df['train'] == 1]
+        # inputDF =  df[ df['train'] == 0]
+        # df_train.drop(['train'], axis=1, inplace=True)
+        # inputDF.drop(['train'], axis=1, inplace=True)
+        # inputDF.reset_index(drop=True,inplace=True)
+    return inputDF, df_test
 
 def predict_data(df_train, df_test):
     """ Function to load the already dumped model and predict the result """
@@ -154,8 +122,6 @@ def predict_data(df_train, df_test):
     # st.dataframe(df_test)
     ## Load the model
     path = os.getcwd()
-
-    st.write("Running Model")
 
     with open(path + '/../data/model.mdl', 'rb') as model_file :
         model = pickle.load(model_file)
@@ -173,23 +139,17 @@ def main() :
 
     # get the train data
     df_train = pd.read_csv(path + '/../data/train_data.csv')
-
-    st.subheader("Manually input network parameter or from file")
-    ret = st.radio(" Manually input network parameter or from file", ("Manual" , "File"))
+    st.subheader("Enter network parameter either manually or from file")
+    ret = st.radio(" ", ("Manual" , "File"))
     inputDF = None
     if ret is 'Manual':
-        inputDF = manual_test_input(df_train)
+        inputDF, df_test = manual_test_input(df_train)
     elif ret is 'File':
-        inputDF = csv_test_input(df_train)
+        inputDF, df_test = csv_test_input(df_train)
 
-
-    # # get the list of all features
-    # impdf = pd.read_csv(path + '/data/imp_features.csv')
-    # impdf.columns = ['feature', 'importance']
-    # impdf.set_index('feature', inplace=True)
+    # predict the test data
     if inputDF is not None:
-
-        predict = predict_data(df_train, inputDF, ret)
+        predict = predict_data(df_train, df_test)
         st.subheader("Prediction")
         if ret is 'Manual':
             if predict:
