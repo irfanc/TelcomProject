@@ -1,0 +1,1 @@
+web: setup.sh && streamlit run src/Predict.py
