@@ -204,10 +204,10 @@ def encoding_categorical_cols(DF, categorical_cols):
     # print(DF[categorical_cols].info())
 
 
-def encoding_target_cols(DF, target_cols):
+def encoding_target_cols(DF, target_cols=str):
     """ encode 'normal' attack as 0 , i.e Fasle  and othere attacks as True attack"""
     # Below code converts a multiclass categorical column into a binary col, where replace 'normal' with Flase and rest with True
-    DF[target_cols + '_code'] = np.where(DF[target_cols].str.contains("normal"), False, True)
+    DF[target_cols + '_code'] = DF[target_cols].str != "normal"
     DF[target_cols] = DF[target_cols].astype('category')
     DF[target_cols + '_type'] = DF[target_cols].cat.codes
 
@@ -254,7 +254,6 @@ def compute_important_cols(DF, min_importance_value=0.02, plot=False):
 
 from sklearn import preprocessing
 
-
 def scaleData(DF):
     scl = preprocessing.MinMaxScaler(feature_range=(0, 1))
     arr_scld = scl.fit_transform(DF)
@@ -265,7 +264,7 @@ def scaleData(DF):
 
 
 def prepare_data(df, binary=True, category=True, target=False, scaling=False):
-    DF = df
+    DF = df.copy()
 
     if category:
         # encoding of categorical_cols
@@ -281,27 +280,28 @@ def prepare_data(df, binary=True, category=True, target=False, scaling=False):
 
     if target:
         # encoding of target_cols
-        target_cols = ['attack']
+        target_cols = 'attack'
+        print( DF.attack.dtype.name )
         encoding_target_cols(DF, target_cols)
         col = ['attack', 'attack_code', 'attack_type']
+        target_cols = 'attack_code'
 
-    feature_cols =  DF.drop(columns = col ).columns
+    feature_cols = DF.drop(columns = col).columns
 
     if scaling:
-        DF = scaleData(DF[feature_cols])
+      DF[feature_cols] =  scaleData(DF[feature_cols])
 
     return DF, feature_cols
 
-def predict_data(model, df):
-    Target = ['attack']
-    feature_cols = list(set(df.columns) - set(Target))
+def predict_data(model, df, feature_col, target_col):
+    X_test = df[feature_col]
+    Y_test = df[target_col]
 
-    X_test = df[feature_cols]
-    # Y_test = df[Target].copy().values.ravel()
+    Y_predict       = model.predict(X_test)
+    conf_mat        = confusion_matrix(Y_test, Y_predict)
+    classfictin_rpt = classification_report(Y_test, Y_predict, output_dict=False)
 
-    Y_predict = model.predict(X_test)
-    return Y_predict
-
+    return Y_predict, conf_mat, classfictin_rpt
 
 
 def prepare_data1(train_file_name , test_file_name) :
