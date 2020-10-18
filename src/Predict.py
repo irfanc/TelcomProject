@@ -1,36 +1,37 @@
 ########################################### IMPORT ALL THE REQUIRED LIBRARIES ###########################################
 import numpy as np
 import pandas as pd
-import seaborn as sns
+# import seaborn as sns
 import matplotlib.pyplot as plt
-import datetime
+# import datetime
 
-from sklearn.preprocessing import OneHotEncoder,StandardScaler
+# from sklearn.preprocessing import OneHotEncoder,StandardScaler
 from sklearn.model_selection import train_test_split, KFold, cross_val_score
-from sklearn.metrics import mean_squared_error , r2_score, accuracy_score,confusion_matrix, classification_report
-from sklearn.metrics import roc_curve, roc_auc_score, f1_score, precision_recall_curve, plot_confusion_matrix, ConfusionMatrixDisplay
-from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
-from sklearn import model_selection
-from sklearn.linear_model import LogisticRegression
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.naive_bayes import GaussianNB
-from sklearn.model_selection import KFold
-from sklearn.svm import SVC
+# from sklearn.metrics import mean_squared_error , r2_score, accuracy_score,confusion_matrix, classification_report
+# from sklearn.metrics import roc_curve, roc_auc_score, f1_score, precision_recall_curve
+# from sklearn.metrics import plot_confusion_matrix, ConfusionMatrixDisplay
+# from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
+# from sklearn import model_selection
+# from sklearn.linear_model import LogisticRegression
+# from sklearn.tree import DecisionTreeClassifier
+# from sklearn.neighbors import KNeighborsClassifier
+# from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+# from sklearn.naive_bayes import GaussianNB
+# from sklearn.model_selection import KFold
+# from sklearn.svm import SVC
 # from xgboost import XGBClassifier
 # from xgboost import plot_importance
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
-from sklearn.neural_network import MLPClassifier
-from IPython.display import Audio
-import scipy
-sound_file ="Neene Modalu.mp3"
-import time
+# from sklearn.neural_network import MLPClassifier
+# from IPython.display import Audio
+# import scipy
+# sound_file ="Neene Modalu.mp3"
+# import time
 import streamlit as st
 import Definitions as lib
 import pickle
-import os
+import os, io
 
 
 FEATURE_COL = None
@@ -46,7 +47,6 @@ def create_feature_inputs_sidebar(df):
     binary_cols = ['land', 'logged_in', 'root_shell', 'is_hot_login', 'su_attempted']
     df[binary_cols] = df[binary_cols].astype('bool')
     # encoding_binary_cols(DF, binary_cols)
-
     dict = {}
     for col in df.columns :
         if df[col].dtype.name == 'object':
@@ -54,127 +54,131 @@ def create_feature_inputs_sidebar(df):
         elif df[col].dtype.name == 'bool':
             dict[col] = st.sidebar.checkbox(col)
         elif df[col].dtype.name == 'int64':
-            dict[col] = st.sidebar.slider(col , df[col].min() , df[col].max() , 1)
+            dict[col] = st.sidebar.number_input(col, df[col].min() , df[col].max() , 1)
         else:
-            dict[col] = st.sidebar.slider(col , df[col].min() , df[col].max(), 1.0)
+            dict[col] = st.sidebar.number_input(col, df[col].min() , df[col].max(), 1.0)
     d = pd.DataFrame(dict, index=[0])
 
     return d
 
-def prepare_data(df_train, df_test):
+def prepare_data(df_train, df_test, feature_col, target_col, binary=True, category=True, target=True):
     """ Function to take prepare the input data for model prediction """
+    train, test = lib.prepare_test_train_data(df_train, df_test, binary=binary, category = category, scaling = False, target = target)
+    df_train_scaled   = lib.scaleData(train[feature_col])
+    df_test_scaled    = lib.scaleData(test[feature_col])
 
-    df_train['train'] = 1
-    df_test['train'] = 0
-    df = pd.concat([df_train, df_test], ignore_index=True)
-    df, feature_col = lib.prepare_data(df, binary=True, category=True, scaling=True , target=True)
-    df_train = df[ df['train'] == 1]
-    df_test = df[ df['train'] == 0]
-    df.drop(['train'], axis=1, inplace=True)
-    df_test.drop(['train'], axis=1, inplace=True)
-    df_train.drop(['train'], axis=1, inplace=True)
-    return df_train, df_test
+    return df_train_scaled, train[target_col], df_test_scaled, test[target_col]
 
 def manual_test_input(df_train):
     """ Function to take Manual inputs for Network parameter """
 
     # make preparation for user input for network parameters
     inputDF = create_feature_inputs_sidebar(df_train)
-    # st.text('manual_test_input .. start')
-    # st.dataframe(inputDF.head())
-    # df_test = prepare_data(df_train, inputDF)
 
     return inputDF
-
 
 def csv_test_input(df_train):
     """ Function to take File based inputs for Network parameter """
+    uploaded_file = st.sidebar.file_uploader("Telecom Network Test-Data", type="csv")
+    if uploaded_file is None:
+        return None
 
-    uploaded_file = st.sidebar.file_uploader("Telecom Network Testing Data", type="csv")
-    inputDF = None
-    if uploaded_file is not None:
-        inputDF = pd.read_csv(uploaded_file)
-        # st.text('csv_test_input .. start')
-        # st.dataframe(inputDF.head())
-
-        # df_test = prepare_data(df_train , inputDF)
-
+    # st.text ("File is closed ? --> {} ".format(uploaded_file.closed))
+    uploaded_file.seek(0)
+    inputDF = pd.read_csv(uploaded_file)
+    # st.text ("File is closed ? --> {} ".format(uploaded_file.closed))
     return inputDF
 
-def predict_data(df_train, df_test, feature_col, target_col):
+@st.cache()
+def predict_data(Xtrain, Ytrain, Xtest, Ytest):
     """ Function to load the already dumped model and predict the result """
 
-    # st.dataframe(df_test)
     path = os.getcwd()
-
     with open(path + '/../data/model.mdl', 'rb') as model_file :
         model = pickle.load(model_file)
-        st.text(model)
-        predict, confusion_matrix, class_rpt = lib.predict_data(model, df_test, feature_col, target_col)
+        # st.text(model)
+        predict, confusion_matrix, class_rpt = lib.predict_data(model, Xtest, Ytest)
 
         # compute model score score
-        X = df_train[feature_col]
-        Y = df_train[target_col]
-        X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.3, random_state=123)
-        score = model.score(X_train, y_train)
-
-        # plotting of confusion matrix
-        # disp = plot_confusion_matrix(model, X, Y, cmap=plt.cm.Blues)
-        # return predict, score, disp.confusion_matrix, class_rpt
+        x_train, x_test, y_train, y_test = train_test_split(Xtrain, Ytrain, test_size=0.3, random_state=123)
+        score = model.score(Xtest, Ytest)
 
         return predict, score, confusion_matrix, class_rpt
 
+MANUAL_INPUT = "Manual Input"
+FILE_INPUT = "Input Test File"
 
-def main() :
+@st.cache(allow_output_mutation=True)
+def get_train_data():
+    # get the train data
+    path = os.getcwd()
+    df_train = pd.read_csv(path + '/../data/train_data.csv')
+
+    return df_train
+
+def get_input_data(inputType, df_train):
+    if inputType is MANUAL_INPUT:
+        # st.text('Preparing Manual Input')
+        inputDF = manual_test_input(df_train)
+    elif inputType is FILE_INPUT:
+        # st.text('Preparing File Input')
+        inputDF = csv_test_input(df_train)
+
+    return inputDF
+
+
+def show_prediction_details (conf_mat, classification_rpt) :
+    st.subheader('Confusion Matrix')
+    st.text (conf_mat)
+    st.subheader("Classification Report")
+    st.text (classification_rpt)
+    st.text ("")
+    st.text ("")
+
+@st.cache()
+def display_test_data(inputDF, predict):
+    inputDF['predicted_attack'] = predict
+    inputDF['predicted_attack'] = np.where(inputDF['predicted_attack'] == True, "Attack", "No-Attack")
+    return inputDF
+
+def main():
     st.title("""
      ** Predict Telecom Connection Status -  Attack or No-Attack ** !
     """)
 
     st.sidebar.header('Inputs')
-    path = os.getcwd()
 
     # get the train data
-    df_train = pd.read_csv(path + '/../data/train_data.csv')
-    FEATURE_COL = list(df_train.drop(columns='attack').columns)
+    df_train = get_train_data()
+    FEATURE_COL = list(df_train.drop(columns=['attack']).columns)
     TARGET_COL = 'attack_code'
 
     # get the test data
     st.sidebar.subheader("Enter network parameter either manually or from file")
-    ret = st.sidebar.radio(" ", ("Manual" , "File"))
-    inputDF = None
-    if ret is 'Manual':
-        inputDF = manual_test_input(df_train)
-    elif ret is 'File':
-        inputDF = csv_test_input(df_train)
+    ret = st.sidebar.radio(" Input Type ", (MANUAL_INPUT , FILE_INPUT))
+    inputDF = get_input_data(ret , df_train)
 
     if inputDF is not None:
         # prepare the data for prediction
-        trainDF, testDF = prepare_data(df_train, inputDF)
-        # st.dataframe(trainDF.describe().T )
-        # st.dataframe(testDF.describe().T )
+        Xtrain, Ytrain, Xtest, Ytest = prepare_data(df_train.copy(), inputDF, feature_col=FEATURE_COL, target_col=TARGET_COL)
 
         # data prediction
-        predict, score, conf_mat, classification_rpt = predict_data(trainDF, testDF, FEATURE_COL, TARGET_COL)
-        st.subheader('Accuracy of the prediction is {}%'.format( round(100*score,2)))
-        st.subheader ('Confusion Matrix')
-        st.text (conf_mat)
-        st.subheader("Classification Report")
-        st.text (classification_rpt)
+        predict, score, conf_mat, classification_rpt = predict_data(Xtrain, Ytrain, Xtest, Ytest)
 
         st.subheader("Prediction")
-        if ret is 'Manual':
-            if predict:
-                output = "There is attack on Network"
+        if ret is MANUAL_INPUT:
+            st.text(predict)
+            if predict is True:
+                output = "There is an Attack "
             else:
-                output = "There is No-Attack in the Netwrok"
+                output = "There is No-Attack"
             st.text(output)
-        elif ret is 'File':
-            inputDF['predicted_attack'] = predict
-            inputDF['predicted_attack'] = np.where(inputDF['predicted_attack'] == True, "Attack", "No-Attack")
-            st.dataframe(data = inputDF)
+        elif ret is FILE_INPUT:
+            inputDF = display_test_data(inputDF, predict)
+            st.dataframe(inputDF)
 
-        st.subheader("Test accuracy Score = ???")
-
+        if ret is FILE_INPUT and st.checkbox(" Prediction Details ") :
+            show_prediction_details(conf_mat, classification_rpt)
 
 if __name__ == "__main__":
     # execute only if run as a script

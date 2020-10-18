@@ -77,13 +77,6 @@ def autoLabel(ax, fontsize=16):
             width = rect.get_width()
         ax.text(rect.get_x() + width / 2., 1.005 * height, str(height), ha='center', va='bottom', fontsize=fontsize)
 
-
-def compute_attack_type(x):
-    if (x['attack'] == 'normal'):
-        return 'no attack'
-    return 'attack'
-
-
 def check_attack_class_density(df):
     fig, ax = plt.subplots(2, 1, figsize=(20, 20))
     fig.suptitle('Target Class distribution', fontsize=50)  # Add the text/suptitle to figure
@@ -121,20 +114,6 @@ def check_attack_class_density(df):
     plt.show()
 
 
-# Add a column similar to 'root_access' with values into either "Root Accessed"  or "Root not Accessed"
-
-def compute_root_access_type(x):
-    if x['num_root'] != 0:
-        return 'Root Accesses'
-    return 'Root not Accessed'
-
-
-def compute_duration_type(x):
-    if x['duration'] != 0:
-        return 'Non-Zero length'
-    return 'Zero length'
-
-
 def drop_cols_with_equal_min_max(DF):
     """From Panda profiling, we found that there is a column with all the values are same.
     Below code is to find if max and min of a column is same then it contains all same values
@@ -164,29 +143,26 @@ def corelated_feature_matrix(DF, threshold_value=0.7):
     df_corr = pd.DataFrame(corr1, columns=corr.columns, index=corr.columns)
     return df_corr
 
-
+# returns list of corelated columns which we can drop
+# input is correlated matrix
 def compute_corelated_cols(DF):
-    """returns list of corelated columns which we can drop
-    input is correlated matrix
-    """
     dict = {}
     # iterate over all the columns to find out others which are correlated > 0.7,  as per corrlation matrix
     for c in DF.columns:
-        l = DF.index[df_corr[c] == 1].tolist()
-        l.remove(c)  # remove slef column from the list
+        l = DF.index[DF[c] == 1].tolist()
+        l.remove(c)  #  remove slef column from the list
         #     print(l)
-        if len(l):
+        if len(l) :
             dict[c] = set(l)
 
     drop_set = set()
     for e in dict:
-        #     print(e , dict[e] , drop_set)
-        if e not in drop_set:
+    #     print(e , dict[e] , drop_set)
+      if e not in drop_set :
             drop_set = drop_set.union(dict[e])
 
     print("No. of corelated columns needs to be dropped  are  {}\n{}".format(len(drop_set), str(drop_set)))
     return drop_set
-
 
 def encoding_binary_cols(DF, binary_cols):
     '''encoding binary columns'''
@@ -207,9 +183,8 @@ def encoding_categorical_cols(DF, categorical_cols):
 def encoding_target_cols(DF, target_cols=str):
     """ encode 'normal' attack as 0 , i.e Fasle  and othere attacks as True attack"""
     # Below code converts a multiclass categorical column into a binary col, where replace 'normal' with Flase and rest with True
-    DF[target_cols + '_code'] = DF[target_cols].str != "normal"
-    DF[target_cols] = DF[target_cols].astype('category')
-    DF[target_cols + '_type'] = DF[target_cols].cat.codes
+    DF[target_cols + '_code'] =  np.where(DF[target_cols].str.contains("normal"), False, True)
+    # DF[target_cols] = DF[target_cols].astype('category')
 
 
 def plot_important_cols(DF, col, imp, min_importance_value=0.02):
@@ -233,7 +208,7 @@ def plot_important_cols(DF, col, imp, min_importance_value=0.02):
 
 
 # feature selection by Random Forest
-def compute_important_cols(DF, min_importance_value=0.02, plot=False):
+def compute_important_cols(DF, feature_cols, min_importance_value=0.02, plot=False):
     X = DF[feature_cols]
     Y = DF['attack_code']
     model = RandomForestClassifier(random_state=123, max_depth=20)
@@ -262,7 +237,6 @@ def scaleData(DF):
     #     print(d_scld.describe())
     return d_scld
 
-
 def prepare_data(df, binary=True, category=True, target=False, scaling=False):
     DF = df.copy()
 
@@ -283,7 +257,7 @@ def prepare_data(df, binary=True, category=True, target=False, scaling=False):
         target_cols = 'attack'
         print( DF.attack.dtype.name )
         encoding_target_cols(DF, target_cols)
-        col = ['attack', 'attack_code', 'attack_type']
+        col = ['attack', 'attack_code']
         target_cols = 'attack_code'
 
     feature_cols = DF.drop(columns = col).columns
@@ -293,9 +267,22 @@ def prepare_data(df, binary=True, category=True, target=False, scaling=False):
 
     return DF, feature_cols
 
-def predict_data(model, df, feature_col, target_col):
-    X_test = df[feature_col]
-    Y_test = df[target_col]
+
+def prepare_test_train_data(df_train, df_test, binary=True, category=True, scaling=True , target=True):
+    """ Function to take prepare the input data for model prediction """
+    df_train['train'] = 1
+    df_test['train'] = 0
+    df = pd.concat([df_train, df_test], ignore_index=True)
+    df, feature_col = prepare_data(df, binary=binary, category=category, scaling=scaling , target=target)
+    df_train = df[ df['train'] == 1]
+    df_test = df[ df['train'] == 0]
+    df.drop(['train'], axis=1, inplace=True)
+    df_test.drop(['train'], axis=1, inplace=True)
+    df_train.drop(['train'], axis=1, inplace=True)
+    return df_train, df_test
+
+
+def predict_data(model, X_test, Y_test):
 
     Y_predict       = model.predict(X_test)
     conf_mat        = confusion_matrix(Y_test, Y_predict)
@@ -336,13 +323,13 @@ def prepare_data1(train_file_name , test_file_name) :
     encoding_target_cols(df_train , target_cols)
     encoding_target_cols(df_test , target_cols)
 
-    target_cols = ['attack', 'attack_code'  , 'attack_type']
+    target_cols = ['attack', 'attack_code']
     feature_cols = df.drop(columns = target_cols).columns
 
     df_train_scaled = scaleData( df[feature_cols])
     df_test_scaled  = scaleData( df_test[feature_cols])
 
-    imp_cols = compute_important_cols(df_train, min_importance_value = 0.02, plot=False)
+    imp_cols = compute_important_cols(df_train, feature_cols, min_importance_value = 0.02, plot=False)
 
     # dump  test and train data into csv file
     df_train_scaled[feature_cols].to_csv('train_data.csv', header = True , index=False , columns=dump_df.columns )
